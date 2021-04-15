@@ -137,11 +137,11 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         restored_dbs, restored_sr = model_restoration(input_)
 
         if i % 1000 == 0:
-            writer.add_images('train/input', input_, epoch_num)
-            writer.add_images('train/target_db', target_db, epoch_num)
-            writer.add_images('train/target_hr', target_hr, epoch_num)
-            writer.add_images('train/pred/hr', restored_sr, epoch_num)
-            writer.add_images('train/pred/lr', restored_dbs[0], epoch_num)
+            writer.add_images('train/input', input_, (epoch_num - 1)*len(train_loader) + i)
+            writer.add_images('train/target_db', target_db, (epoch_num - 1)*len(train_loader) + i)
+            writer.add_images('train/target_hr', target_hr, (epoch_num - 1)*len(train_loader) + i)
+            writer.add_images('train/pred/hr', restored_sr, (epoch_num - 1)*len(train_loader) + i)
+            writer.add_images('train/pred/lr', restored_dbs[0], (epoch_num - 1)*len(train_loader) + i)
 
 
         # Compute loss at each stage
