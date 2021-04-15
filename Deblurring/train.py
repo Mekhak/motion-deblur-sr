@@ -56,16 +56,25 @@ if torch.cuda.device_count() > 1:
   print("\n\nLet's use", torch.cuda.device_count(), "GPUs!\n\n")
 
 
-new_lr = opt.OPTIM.LR_INITIAL
-
-optimizer = optim.Adam(model_restoration.parameters(), lr=new_lr, betas=(0.9, 0.999),eps=1e-8)
+start_lr = opt.OPTIM.LR_INITIAL
+optimizer = optim.Adam(model_restoration.parameters(), lr=start_lr, betas=(0.9, 0.999),eps=1e-8)
 
 
 ######### Scheduler ###########
-warmup_epochs = 3
-scheduler_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS-warmup_epochs, eta_min=opt.OPTIM.LR_MIN)
-scheduler = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=warmup_epochs, after_scheduler=scheduler_cosine)
-scheduler.step()
+# warmup_epochs = 3
+# scheduler_cosine = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS-warmup_epochs, eta_min=opt.OPTIM.LR_MIN)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS, eta_min=opt.OPTIM.LR_MIN)
+# scheduler = GradualWarmupScheduler(optimizer, multiplier=1, total_epoch=warmup_epochs, after_scheduler=scheduler_cosine)
+# scheduler.step()
+
+# test the scheduler
+# for i in range(opt.OPTIM.NUM_EPOCHS):
+#     print("i: {}  lr: {}".format(i, scheduler_cosine.get_lr()[0]))
+#     scheduler_cosine.step()
+#
+# import sys
+# print("exiting")
+# sys.exit(0)
 
 ######### Resume ###########
 if opt.TRAINING.RESUME:
@@ -76,9 +85,10 @@ if opt.TRAINING.RESUME:
 
     for i in range(1, start_epoch):
         scheduler.step()
-    new_lr = scheduler.get_lr()[0]
+    start_lr = scheduler.get_lr()[0]
+
     print('------------------------------------------------------------------------------')
-    print("==> Resuming Training with learning rate:", new_lr)
+    print("==> Resuming Training with learning rate:", start_lr)
     print('------------------------------------------------------------------------------')
 
 if len(device_ids)>1:
@@ -107,17 +117,16 @@ writer = SummaryWriter(log_dir='summary', comment=f'LR_{opt.OPTIM.LR_INITIAL}_BS
 best_psnr = 0
 best_epoch = 0
 
-epoch_num = 0
-
 for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
     epoch_start_time = time.time()
     epoch_loss = 0
     train_id = 1
-    epoch_num += 1
 
     input_ = None
     restored_dbs = None
     restored_sr = None
+
+    writer.add_scalar('learning_rate', scheduler.get_lr()[0], epoch)
 
     model_restoration.train()
     for i, data in enumerate(tqdm(train_loader), 0):
@@ -137,11 +146,11 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         restored_dbs, restored_sr = model_restoration(input_)
 
         if i % 1000 == 0:
-            writer.add_images('train/input', input_, (epoch_num - 1)*len(train_loader) + i)
-            writer.add_images('train/target_db', target_db, (epoch_num - 1)*len(train_loader) + i)
-            writer.add_images('train/target_hr', target_hr, (epoch_num - 1)*len(train_loader) + i)
-            writer.add_images('train/pred/hr', restored_sr, (epoch_num - 1)*len(train_loader) + i)
-            writer.add_images('train/pred/lr', restored_dbs[0], (epoch_num - 1)*len(train_loader) + i)
+            writer.add_images('train/input', input_, (epoch - 1)*len(train_loader) + i)
+            writer.add_images('train/target_db', target_db, (epoch - 1)*len(train_loader) + i)
+            writer.add_images('train/target_hr', target_hr, (epoch - 1)*len(train_loader) + i)
+            writer.add_images('train/pred/hr', restored_sr, (epoch - 1)*len(train_loader) + i)
+            writer.add_images('train/pred/lr', restored_dbs[0], (epoch - 1)*len(train_loader) + i)
 
 
         # Compute loss at each stage
@@ -158,7 +167,7 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         epoch_loss +=loss.item()
 
         if i % 100 == 0:
-            writer.add_scalar('Loss/train', loss.item(), (epoch_num - 1)*len(train_loader) + i)
+            writer.add_scalar('Loss/train', loss.item(), (epoch - 1)*len(train_loader) + i)
 
     epoch_loss /= len(train_loader)
 
@@ -211,16 +220,15 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
 
         for tag, value in model_restoration.named_parameters():
             tag = tag.replace('.', '/')
-            writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), epoch_num)
-            writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), epoch_num)
+            writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), epoch)
+            writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), epoch)
 
-        writer.add_scalar('Loss/validation', val_loss, epoch_num)
-        writer.add_scalar('Validation_Score', psnr_score, epoch_num)
-        writer.add_scalar('learning_rate', scheduler.get_lr()[0], epoch_num)
-        writer.add_images('test/input', input_, epoch_num)
-        writer.add_images('test/target', target, epoch_num)
-        writer.add_images('test/pred/LR', restored_dbs[0], epoch_num)
-        writer.add_images('test/pred/HR', restored_sr, epoch_num)
+        writer.add_scalar('Loss/validation', val_loss, epoch)
+        writer.add_scalar('Validation_Score', psnr_score, epoch)
+        writer.add_images('test/input', input_, epoch)
+        writer.add_images('test/target', target, epoch)
+        writer.add_images('test/pred/LR', restored_dbs[0], epoch)
+        writer.add_images('test/pred/HR', restored_sr, epoch)
 
     scheduler.step()
 

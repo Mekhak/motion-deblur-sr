@@ -19,6 +19,10 @@ def save_checkpoint(model_dir, state, session):
     model_out_path = os.path.join(model_dir,"model_epoch_{}_{}.pth".format(epoch,session))
     torch.save(state, model_out_path)
 
+def load_pretrained_MPRnet(model, weights):
+    checkpoint = torch.load(weights)
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
+
 def load_checkpoint(model, weights):
     checkpoint = torch.load(weights)
     try:
@@ -30,6 +34,8 @@ def load_checkpoint(model, weights):
             name = k[7:] # remove `module.`
             new_state_dict[name] = v
         model.load_state_dict(new_state_dict)
+
+    print("Checkpoint loaded successfully.")
 
 
 def load_checkpoint_multigpu(model, weights):
