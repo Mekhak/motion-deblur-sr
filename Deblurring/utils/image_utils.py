@@ -16,3 +16,7 @@ def numpyPSNR(tar_img, prd_img):
     rmse = np.sqrt(np.mean(imdff**2))
     ps = 20*np.log10(255/rmse)
     return ps
+
+def psnr(img1, img2):
+    mse = torch.mean((img1 - img2) ** 2)
+    return 20 * torch.log10(1.0 / torch.sqrt(mse))

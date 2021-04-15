@@ -1,5 +1,7 @@
 import os
-from config import Config 
+from config import Config
+from torch.utils.tensorboard import SummaryWriter
+
 opt = Config('training.yml')
 
 gpus = ','.join([str(i) for i in opt.GPU])
@@ -85,24 +87,37 @@ if len(device_ids)>1:
 ######### Loss ###########
 criterion_char = losses.CharbonnierLoss()
 criterion_edge = losses.EdgeLoss()
+criterion_sr = torch.nn.MSELoss(size_average=True)
+criterion_sr = criterion_sr.cuda()
 
 ######### DataLoaders ###########
-train_dataset = get_training_data(train_dir, {'patch_size':opt.TRAINING.TRAIN_PS})
+print("Creating train dataloader...")
+train_dataset = get_training_data(train_dir)
 train_loader = DataLoader(dataset=train_dataset, batch_size=opt.OPTIM.BATCH_SIZE, shuffle=True, num_workers=0, drop_last=False, pin_memory=True)
 
-val_dataset = get_validation_data(val_dir, {'patch_size':opt.TRAINING.VAL_PS})
-val_loader = DataLoader(dataset=val_dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=False, pin_memory=True)
+print("Creating test dataloder...")
+val_dataset = get_validation_data(val_dir)
+val_loader = DataLoader(dataset=val_dataset, batch_size=4, shuffle=False, num_workers=0, drop_last=False, pin_memory=True)
 
 print('===> Start Epoch {} End Epoch {}'.format(start_epoch,opt.OPTIM.NUM_EPOCHS + 1))
 print('===> Loading datasets')
 
+writer = SummaryWriter(log_dir='summary', comment=f'LR_{opt.OPTIM.LR_INITIAL}_BS_{opt.OPTIM.BATCH_SIZE}')
+
 best_psnr = 0
 best_epoch = 0
+
+epoch_num = 0
 
 for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
     epoch_start_time = time.time()
     epoch_loss = 0
     train_id = 1
+    epoch_num += 1
+
+    input_ = None
+    restored_dbs = None
+    restored_sr = None
 
     model_restoration.train()
     for i, data in enumerate(tqdm(train_loader), 0):
@@ -111,60 +126,111 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
         for param in model_restoration.parameters():
             param.grad = None
 
-        target = data[0].cuda()
-        input_ = data[1].cuda()
+        input_ = data[0].cuda()
+        target_db = data[1].cuda()
+        target_hr = data[2].cuda()
 
-        restored = model_restoration(input_)
- 
+        # print("input_.shape: ", input_.shape)
+        # print("target_db.shape: ", target_db.shape)
+        # print("target_hr.shape: ", target_hr.shape)
+
+        restored_dbs, restored_sr = model_restoration(input_)
+
+        if i % 1000 == 0:
+            writer.add_images('train/input', input_, epoch_num)
+            writer.add_images('train/target_db', target_db, epoch_num)
+            writer.add_images('train/target_hr', target_hr, epoch_num)
+            writer.add_images('train/pred/hr', restored_sr, epoch_num)
+            writer.add_images('train/pred/lr', restored_dbs[0], epoch_num)
+
+
         # Compute loss at each stage
-        loss_char = np.sum([criterion_char(restored[j],target) for j in range(len(restored))])
-        loss_edge = np.sum([criterion_edge(restored[j],target) for j in range(len(restored))])
-        loss = (loss_char) + (0.05*loss_edge)
-       
+        loss_char = np.sum([criterion_char(restored_dbs[j],target_db) for j in range(len(restored_dbs))])
+        loss_edge = np.sum([criterion_edge(restored_dbs[j],target_db) for j in range(len(restored_dbs))])
+        # print("restored_sr.shape: ", restored_sr.shape)
+        # print("target_hr.shape", target_hr.shape)
+        loss_sr = criterion_sr(restored_sr, target_hr)
+
+        loss = 0.5*((loss_char) + (0.05*loss_edge)) + loss_sr
+
         loss.backward()
         optimizer.step()
         epoch_loss +=loss.item()
 
+        if i % 100 == 0:
+            writer.add_scalar('Loss/train', loss.item(), (epoch_num - 1)*len(train_loader) + i)
+
+    epoch_loss /= len(train_loader)
+
     #### Evaluation ####
     if epoch%opt.TRAINING.VAL_AFTER_EVERY == 0:
         model_restoration.eval()
-        psnr_val_rgb = []
-        for ii, data_val in enumerate((val_loader), 0):
-            target = data_val[0].cuda()
-            input_ = data_val[1].cuda()
+        val_loss = 0
+        psnr_score = 0
+
+        target = None
+
+        for ii, data_val in enumerate(tqdm(val_loader), 0):
+            input_ = data_val[0].cuda()
+            target = data_val[1].cuda()
 
             with torch.no_grad():
-                restored = model_restoration(input_)
-            restored = restored[0]
+                restored_dbs, restored_sr = model_restoration(input_)
+            # restored = restored[0]
 
-            for res,tar in zip(restored,target):
-                psnr_val_rgb.append(utils.torchPSNR(res, tar))
+            # print("input_.shape: ", input_.shape)
+            # print("target.shape: ", target.shape)
+            # print("restored.shape: ", restored.shape)
 
-        psnr_val_rgb  = torch.stack(psnr_val_rgb).mean().item()
+            val_loss += torch.nn.MSELoss()(restored_sr, target)
 
-        if psnr_val_rgb > best_psnr:
-            best_psnr = psnr_val_rgb
+            # for res,tar in zip(restored_sr,target):
+            #     psnr_val_rgb.append(utils.torchPSNR(res, tar))
+            psnr_score += utils.psnr(restored_sr, target)
+
+        # psnr_val_rgb  = torch.stack(psnr_val_rgb).mean().item()
+        # psnr_val_rgb /= len(val_loader)
+
+        val_loss /= len(val_loader)
+        psnr_score /= len(val_loader)
+
+        if psnr_score > best_psnr:
+            best_psnr = psnr_score
             best_epoch = epoch
-            torch.save({'epoch': epoch, 
+            torch.save({'epoch': epoch,
                         'state_dict': model_restoration.state_dict(),
                         'optimizer' : optimizer.state_dict()
                         }, os.path.join(model_dir,"model_best.pth"))
 
-        print("[epoch %d PSNR: %.4f --- best_epoch %d Best_PSNR %.4f]" % (epoch, psnr_val_rgb, best_epoch, best_psnr))
+        print("[epoch %d Loss: %.4f PSNR: %.4f --- best_epoch %d Best_PSNR %.4f]" % (epoch, val_loss, psnr_score, best_epoch, best_psnr))
 
-        torch.save({'epoch': epoch, 
+        torch.save({'epoch': epoch,
                     'state_dict': model_restoration.state_dict(),
                     'optimizer' : optimizer.state_dict()
-                    }, os.path.join(model_dir,f"model_epoch_{epoch}.pth")) 
+                    }, os.path.join(model_dir,f"model_epoch_{epoch}.pth"))
+
+        for tag, value in model_restoration.named_parameters():
+            tag = tag.replace('.', '/')
+            writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), epoch_num)
+            writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), epoch_num)
+
+        writer.add_scalar('Loss/validation', val_loss, epoch_num)
+        writer.add_scalar('Validation_Score', psnr_score, epoch_num)
+        writer.add_scalar('learning_rate', scheduler.get_lr()[0], epoch_num)
+        writer.add_images('test/input', input_, epoch_num)
+        writer.add_images('test/target', target, epoch_num)
+        writer.add_images('test/pred/LR', restored_dbs[0], epoch_num)
+        writer.add_images('test/pred/HR', restored_sr, epoch_num)
 
     scheduler.step()
-    
+
     print("------------------------------------------------------------------")
     print("Epoch: {}\tTime: {:.4f}\tLoss: {:.4f}\tLearningRate {:.6f}".format(epoch, time.time()-epoch_start_time, epoch_loss, scheduler.get_lr()[0]))
     print("------------------------------------------------------------------")
 
-    torch.save({'epoch': epoch, 
+    torch.save({'epoch': epoch,
                 'state_dict': model_restoration.state_dict(),
                 'optimizer' : optimizer.state_dict()
                 }, os.path.join(model_dir,"model_latest.pth")) 
 
+writer.close()

@@ -11,132 +11,192 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in ['jpeg', 'JPEG', 'jpg', 'png', 'JPG', 'PNG', 'gif'])
 
 class DataLoaderTrain(Dataset):
-    def __init__(self, rgb_dir, img_options=None):
+    def __init__(self, root_dir):
         super(DataLoaderTrain, self).__init__()
 
-        inp_files = sorted(os.listdir(os.path.join(rgb_dir, 'input')))
-        tar_files = sorted(os.listdir(os.path.join(rgb_dir, 'target')))
+        self.root_dir    = root_dir
+        self.blur_dir    = os.path.join(root_dir, "blur")
+        self.sharp_dir   = os.path.join(root_dir, "sharp")
+        self.sharp4x_dir = os.path.join(root_dir, "sharp4x")
 
-        self.inp_filenames = [os.path.join(rgb_dir, 'input', x)  for x in inp_files if is_image_file(x)]
-        self.tar_filenames = [os.path.join(rgb_dir, 'target', x) for x in tar_files if is_image_file(x)]
-
-        self.img_options = img_options
-        self.sizex       = len(self.tar_filenames)  # get the size of target
-
-        self.ps = self.img_options['patch_size']
+        self.data_len = len(os.listdir(self.blur_dir))
+        print("data len: ", self.data_len)
+        # inp_files = sorted(os.listdir(os.path.join(rgb_dir, 'input')))
+        # tar_files = sorted(os.listdir(os.path.join(rgb_dir, 'target')))
+        #
+        # self.inp_filenames = [os.path.join(rgb_dir, 'input', x)  for x in inp_files if is_image_file(x)]
+        # self.tar_filenames = [os.path.join(rgb_dir, 'target', x) for x in tar_files if is_image_file(x)]
+        #
+        # self.img_options = img_options
+        # self.sizex       = len(self.tar_filenames)  # get the size of target
+        #
+        # self.ps = self.img_options['patch_size']
 
     def __len__(self):
-        return self.sizex
+        return self.data_len
+        # return self.sizex
 
     def __getitem__(self, index):
-        index_ = index % self.sizex
-        ps = self.ps
+        fname = '{}.png'.format(index + 1)
+        fpath_blur    = os.path.join(self.blur_dir, fname)
+        fpath_sharp   = os.path.join(self.sharp_dir, fname)
+        fpath_sharp4x = os.path.join(self.sharp4x_dir, fname)
 
-        inp_path = self.inp_filenames[index_]
-        tar_path = self.tar_filenames[index_]
+        blur_img = Image.open(fpath_blur)
+        sharp_img = Image.open(fpath_sharp)
+        sharp4x_img = Image.open(fpath_sharp4x)
 
-        inp_img = Image.open(inp_path)
-        tar_img = Image.open(tar_path)
+        # randomly flip
+        # flip = random.randint(0, 2)
+        # blur_img    = np.flip(blur_img, flip)
+        # sharp_img   = np.flip(sharp_img, flip)
+        # sharp4x_img = np.flip(sharp4x_img, flip)
 
-        w,h = tar_img.size
-        padw = ps-w if w<ps else 0
-        padh = ps-h if h<ps else 0
+        # randomly rotation
+        # rotation_times = random.randint(0, 3)
+        # blur_img    = np.rot90(blur_img,    rotation_times, (0, 1))
+        # sharp_img   = np.rot90(sharp_img,   rotation_times, (0, 1))
+        # sharp4x_img = np.rot90(sharp4x_img, rotation_times, (0, 1))
 
-        # Reflect Pad in case image is smaller than patch_size
-        if padw!=0 or padh!=0:
-            inp_img = TF.pad(inp_img, (0,0,padw,padh), padding_mode='reflect')
-            tar_img = TF.pad(tar_img, (0,0,padw,padh), padding_mode='reflect')
+        return TF.to_tensor(blur_img.copy()), \
+               TF.to_tensor(sharp_img.copy()), \
+               TF.to_tensor(sharp4x_img.copy())
 
-        aug    = random.randint(0, 2)
-        if aug == 1:
-            inp_img = TF.adjust_gamma(inp_img, 1)
-            tar_img = TF.adjust_gamma(tar_img, 1)
+        # index_ = index % self.sizex
+        # ps = self.ps
+        #
+        # inp_path = self.inp_filenames[index_]
+        # tar_path = self.tar_filenames[index_]
+        #
+        # inp_img = Image.open(inp_path)
+        # tar_img = Image.open(tar_path)
+        #
+        # w,h = tar_img.size
+        # padw = ps-w if w<ps else 0
+        # padh = ps-h if h<ps else 0
+        #
+        # # Reflect Pad in case image is smaller than patch_size
+        # if padw!=0 or padh!=0:
+        #     inp_img = TF.pad(inp_img, (0,0,padw,padh), padding_mode='reflect')
+        #     tar_img = TF.pad(tar_img, (0,0,padw,padh), padding_mode='reflect')
+        #
+        # aug    = random.randint(0, 2)
+        # if aug == 1:
+        #     inp_img = TF.adjust_gamma(inp_img, 1)
+        #     tar_img = TF.adjust_gamma(tar_img, 1)
+        #
+        # aug    = random.randint(0, 2)
+        # if aug == 1:
+        #     sat_factor = 1 + (0.2 - 0.4*np.random.rand())
+        #     inp_img = TF.adjust_saturation(inp_img, sat_factor)
+        #     tar_img = TF.adjust_saturation(tar_img, sat_factor)
+        #
+        # inp_img = TF.to_tensor(inp_img)
+        # tar_img = TF.to_tensor(tar_img)
+        #
+        # hh, ww = tar_img.shape[1], tar_img.shape[2]
+        #
+        # rr     = random.randint(0, hh-ps)
+        # cc     = random.randint(0, ww-ps)
+        # aug    = random.randint(0, 8)
+        #
+        # # Crop patch
+        # inp_img = inp_img[:, rr:rr+ps, cc:cc+ps]
+        # tar_img = tar_img[:, rr:rr+ps, cc:cc+ps]
+        #
+        # # Data Augmentations
+        # if aug==1:
+        #     inp_img = inp_img.flip(1)
+        #     tar_img = tar_img.flip(1)
+        # elif aug==2:
+        #     inp_img = inp_img.flip(2)
+        #     tar_img = tar_img.flip(2)
+        # elif aug==3:
+        #     inp_img = torch.rot90(inp_img,dims=(1,2))
+        #     tar_img = torch.rot90(tar_img,dims=(1,2))
+        # elif aug==4:
+        #     inp_img = torch.rot90(inp_img,dims=(1,2), k=2)
+        #     tar_img = torch.rot90(tar_img,dims=(1,2), k=2)
+        # elif aug==5:
+        #     inp_img = torch.rot90(inp_img,dims=(1,2), k=3)
+        #     tar_img = torch.rot90(tar_img,dims=(1,2), k=3)
+        # elif aug==6:
+        #     inp_img = torch.rot90(inp_img.flip(1),dims=(1,2))
+        #     tar_img = torch.rot90(tar_img.flip(1),dims=(1,2))
+        # elif aug==7:
+        #     inp_img = torch.rot90(inp_img.flip(2),dims=(1,2))
+        #     tar_img = torch.rot90(tar_img.flip(2),dims=(1,2))
+        #
+        # filename = os.path.splitext(os.path.split(tar_path)[-1])[0]
+        #
+        # return tar_img, inp_img, filename
 
-        aug    = random.randint(0, 2)
-        if aug == 1:
-            sat_factor = 1 + (0.2 - 0.4*np.random.rand())
-            inp_img = TF.adjust_saturation(inp_img, sat_factor)
-            tar_img = TF.adjust_saturation(tar_img, sat_factor)
-
-        inp_img = TF.to_tensor(inp_img)
-        tar_img = TF.to_tensor(tar_img)
-
-        hh, ww = tar_img.shape[1], tar_img.shape[2]
-
-        rr     = random.randint(0, hh-ps)
-        cc     = random.randint(0, ww-ps)
-        aug    = random.randint(0, 8)
-
-        # Crop patch
-        inp_img = inp_img[:, rr:rr+ps, cc:cc+ps]
-        tar_img = tar_img[:, rr:rr+ps, cc:cc+ps]
-
-        # Data Augmentations
-        if aug==1:
-            inp_img = inp_img.flip(1)
-            tar_img = tar_img.flip(1)
-        elif aug==2:
-            inp_img = inp_img.flip(2)
-            tar_img = tar_img.flip(2)
-        elif aug==3:
-            inp_img = torch.rot90(inp_img,dims=(1,2))
-            tar_img = torch.rot90(tar_img,dims=(1,2))
-        elif aug==4:
-            inp_img = torch.rot90(inp_img,dims=(1,2), k=2)
-            tar_img = torch.rot90(tar_img,dims=(1,2), k=2)
-        elif aug==5:
-            inp_img = torch.rot90(inp_img,dims=(1,2), k=3)
-            tar_img = torch.rot90(tar_img,dims=(1,2), k=3)
-        elif aug==6:
-            inp_img = torch.rot90(inp_img.flip(1),dims=(1,2))
-            tar_img = torch.rot90(tar_img.flip(1),dims=(1,2))
-        elif aug==7:
-            inp_img = torch.rot90(inp_img.flip(2),dims=(1,2))
-            tar_img = torch.rot90(tar_img.flip(2),dims=(1,2))
-        
-        filename = os.path.splitext(os.path.split(tar_path)[-1])[0]
-
-        return tar_img, inp_img, filename
 
 class DataLoaderVal(Dataset):
-    def __init__(self, rgb_dir, img_options=None, rgb_dir2=None):
+    def __init__(self, root_dir):
         super(DataLoaderVal, self).__init__()
 
-        inp_files = sorted(os.listdir(os.path.join(rgb_dir, 'input')))
-        tar_files = sorted(os.listdir(os.path.join(rgb_dir, 'target')))
+        self.root_dir    = root_dir
+        self.blur_dir    = os.path.join(root_dir, "input")
+        self.sharp4x_dir = os.path.join(root_dir, "target")
 
-        self.inp_filenames = [os.path.join(rgb_dir, 'input', x)  for x in inp_files if is_image_file(x)]
-        self.tar_filenames = [os.path.join(rgb_dir, 'target', x) for x in tar_files if is_image_file(x)]
-
-        self.img_options = img_options
-        self.sizex       = len(self.tar_filenames)  # get the size of target
-
-        self.ps = self.img_options['patch_size']
+        self.data_len = len(os.listdir(self.blur_dir))
+        print("test dateloader size: ", self.data_len)
 
     def __len__(self):
-        return self.sizex
+        return self.data_len
 
     def __getitem__(self, index):
-        index_ = index % self.sizex
-        ps = self.ps
+        fname = '{}.png'.format(index + 1)
+        fpath_blur    = os.path.join(self.blur_dir, fname)
+        fpath_sharp4x = os.path.join(self.sharp4x_dir, fname)
 
-        inp_path = self.inp_filenames[index_]
-        tar_path = self.tar_filenames[index_]
+        blur_img = Image.open(fpath_blur)
+        sharp4x_img = Image.open(fpath_sharp4x)
 
-        inp_img = Image.open(inp_path)
-        tar_img = Image.open(tar_path)
+        return TF.to_tensor(blur_img.copy()), \
+               TF.to_tensor(sharp4x_img.copy())
 
-        # Validate on center crop
-        if self.ps is not None:
-            inp_img = TF.center_crop(inp_img, (ps,ps))
-            tar_img = TF.center_crop(tar_img, (ps,ps))
 
-        inp_img = TF.to_tensor(inp_img)
-        tar_img = TF.to_tensor(tar_img)
-
-        filename = os.path.splitext(os.path.split(tar_path)[-1])[0]
-
-        return tar_img, inp_img, filename
+# class DataLoaderVal(Dataset):
+#     def __init__(self, rgb_dir):
+#         super(DataLoaderVal, self).__init__()
+#
+#         inp_files = sorted(os.listdir(os.path.join(rgb_dir, 'input')))
+#         tar_files = sorted(os.listdir(os.path.join(rgb_dir, 'target')))
+#
+#         self.inp_filenames = [os.path.join(rgb_dir, 'input', x)  for x in inp_files if is_image_file(x)]
+#         self.tar_filenames = [os.path.join(rgb_dir, 'target', x) for x in tar_files if is_image_file(x)]
+#
+#         self.img_options = img_options
+#         self.sizex       = len(self.tar_filenames)  # get the size of target
+#
+#         self.ps = self.img_options['patch_size']
+#
+#     def __len__(self):
+#         return self.sizex
+#
+#     def __getitem__(self, index):
+#         index_ = index % self.sizex
+#         ps = self.ps
+#
+#         inp_path = self.inp_filenames[index_]
+#         tar_path = self.tar_filenames[index_]
+#
+#         inp_img = Image.open(inp_path)
+#         tar_img = Image.open(tar_path)
+#
+#         # Validate on center crop
+#         if self.ps is not None:
+#             inp_img = TF.center_crop(inp_img, (ps,ps))
+#             tar_img = TF.center_crop(tar_img, (ps,ps))
+#
+#         inp_img = TF.to_tensor(inp_img)
+#         tar_img = TF.to_tensor(tar_img)
+#
+#         filename = os.path.splitext(os.path.split(tar_path)[-1])[0]
+#
+#         return tar_img, inp_img, filename
 
 class DataLoaderTest(Dataset):
     def __init__(self, inp_dir, img_options):

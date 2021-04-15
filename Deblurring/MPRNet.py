@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pdb import set_trace as stx
+from super_resolution.reconstruction import ReconstructModule
 
 ##########################################################################
 def conv(in_channels, out_channels, kernel_size, bias=False, stride = 1):
@@ -258,7 +259,12 @@ class MPRNet(nn.Module):
         
         self.concat12  = conv(n_feat*2, n_feat, kernel_size, bias=bias)
         self.concat23  = conv(n_feat*2, n_feat+scale_orsnetfeats, kernel_size, bias=bias)
-        self.tail     = conv(n_feat+scale_orsnetfeats, 3, kernel_size, bias=bias)
+
+        self.tail = conv(n_feat+scale_orsnetfeats, 3, kernel_size, bias=bias)
+
+        self.before_reconstr = conv(n_feat+scale_orsnetfeats, (n_feat+scale_orsnetfeats) // 2, kernel_size, bias=bias)
+
+        self.reconstructModule = ReconstructModule()
 
     def forward(self, x3_img):
         # Original-resolution Image for Stage 3
@@ -342,6 +348,14 @@ class MPRNet(nn.Module):
         
         x3_cat = self.stage3_orsnet(x3_cat, feat2, res2)
 
+        ## final convolution before the reconstruction (SR)
         stage3_img = self.tail(x3_cat)
 
-        return [stage3_img+x3_img, stage2_img, stage1_img]
+        ## reconstruction (SR)
+        res = self.reconstructModule(self.before_reconstr(x3_cat))
+
+        res = torch.sigmoid(res)
+        # print("min: {}, max: {}".format(torch.min(res), torch.max(res)))
+        # print("res.shape: {}", res.shape)
+
+        return [stage3_img + x3_img, stage2_img, stage1_img], res
