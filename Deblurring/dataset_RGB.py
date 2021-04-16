@@ -147,7 +147,7 @@ class DataLoaderVal(Dataset):
         return self.data_len
 
     def __getitem__(self, index):
-        fname = '{}.png'.format(index + 1)
+        fname = '{}.png'.format(index)
         fpath_blur    = os.path.join(self.blur_dir, fname)
         fpath_sharp4x = os.path.join(self.sharp4x_dir, fname)
 

@@ -171,6 +171,12 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
 
     epoch_loss /= len(train_loader)
 
+    torch.save({'epoch': epoch,
+                'state_dict': model_restoration.state_dict(),
+                'optimizer' : optimizer.state_dict()
+                }, os.path.join(model_dir,"model_epoch_{}.pth".format(epoch)))
+    print("Saved model {}".format(epoch, "model_epoch_{}.pth".format(epoch)))
+
     #### Evaluation ####
     if epoch%opt.TRAINING.VAL_AFTER_EVERY == 0:
         model_restoration.eval()
@@ -209,19 +215,20 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
             torch.save({'epoch': epoch,
                         'state_dict': model_restoration.state_dict(),
                         'optimizer' : optimizer.state_dict()
-                        }, os.path.join(model_dir,"model_best.pth"))
+                        }, os.path.join(model_dir,"model_best_epoch_{}.pth".format(epoch)))
+            print("Saved best model: epoch {}: model: {}".format(epoch, "model_best_epoch_{}.pth".format(epoch)))
 
         print("[epoch %d Loss: %.4f PSNR: %.4f --- best_epoch %d Best_PSNR %.4f]" % (epoch, val_loss, psnr_score, best_epoch, best_psnr))
 
-        torch.save({'epoch': epoch,
-                    'state_dict': model_restoration.state_dict(),
-                    'optimizer' : optimizer.state_dict()
-                    }, os.path.join(model_dir,f"model_epoch_{epoch}.pth"))
+        # torch.save({'epoch': epoch,
+        #             'state_dict': model_restoration.state_dict(),
+        #             'optimizer' : optimizer.state_dict()
+        #             }, os.path.join(model_dir,f"model_epoch_{epoch}.pth"))
 
-        for tag, value in model_restoration.named_parameters():
-            tag = tag.replace('.', '/')
-            writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), epoch)
-            writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), epoch)
+        # for tag, value in model_restoration.named_parameters():
+        #     tag = tag.replace('.', '/')
+        #     writer.add_histogram('weights/' + tag, value.data.cpu().numpy(), epoch)
+        #     writer.add_histogram('grads/' + tag, value.grad.data.cpu().numpy(), epoch)
 
         writer.add_scalar('Loss/validation', val_loss, epoch)
         writer.add_scalar('Validation_Score', psnr_score, epoch)
@@ -236,9 +243,9 @@ for epoch in range(start_epoch, opt.OPTIM.NUM_EPOCHS + 1):
     print("Epoch: {}\tTime: {:.4f}\tLoss: {:.4f}\tLearningRate {:.6f}".format(epoch, time.time()-epoch_start_time, epoch_loss, scheduler.get_lr()[0]))
     print("------------------------------------------------------------------")
 
-    torch.save({'epoch': epoch,
-                'state_dict': model_restoration.state_dict(),
-                'optimizer' : optimizer.state_dict()
-                }, os.path.join(model_dir,"model_latest.pth")) 
+    # torch.save({'epoch': epoch,
+    #             'state_dict': model_restoration.state_dict(),
+    #             'optimizer' : optimizer.state_dict()
+    #             }, os.path.join(model_dir,"model_latest.pth"))
 
 writer.close()
