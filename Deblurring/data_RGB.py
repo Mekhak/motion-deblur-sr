@@ -12,7 +12,7 @@ def get_validation_data(rgb_dir):
 
 def get_test_data(rgb_dir):
     assert os.path.exists(rgb_dir)
-    return DataLoaderTest(rgb_dir)
+    return DataLoaderVal(rgb_dir)
 
 # def get_training_data(h5py_file_path):
 #     assert os.path.exists(h5py_file_path)

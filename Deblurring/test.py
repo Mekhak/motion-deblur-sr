@@ -25,7 +25,6 @@ parser = argparse.ArgumentParser(description='Image Deblurring using MPRNet')
 parser.add_argument('--input_dir', default='./Datasets/', type=str, help='Directory of validation images')
 parser.add_argument('--result_dir', default='./results/', type=str, help='Directory for results')
 parser.add_argument('--weights', default='./pretrained_models/model_deblurring.pth', type=str, help='Path to weights')
-parser.add_argument('--dataset', default='GoPro', type=str, help='Test Dataset') # ['GoPro', 'HIDE', 'RealBlur_J', 'RealBlur_R']
 parser.add_argument('--gpus', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
 
 args = parser.parse_args()
@@ -41,12 +40,12 @@ model_restoration.cuda()
 model_restoration = nn.DataParallel(model_restoration)
 model_restoration.eval()
 
-dataset = args.dataset
-rgb_dir_test = os.path.join(args.input_dir, dataset, 'test', 'input')
-test_dataset = get_test_data(rgb_dir_test, img_options={})
-test_loader  = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=4, drop_last=False, pin_memory=True)
+rgb_dir_test = args.input_dir
+print(rgb_dir_test)
+test_dataset = get_test_data(rgb_dir_test)
+test_loader  = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=False, pin_memory=True)
 
-result_dir  = os.path.join(args.result_dir, dataset)
+result_dir  = args.result_dir
 utils.mkdir(result_dir)
 
 with torch.no_grad():
@@ -57,24 +56,11 @@ with torch.no_grad():
         input_    = data_test[0].cuda()
         filenames = data_test[1]
 
-        # Padding in case images are not multiples of 8
-        if dataset == 'RealBlur_J' or dataset == 'RealBlur_R':
-            factor = 8
-            h,w = input_.shape[2], input_.shape[3]
-            H,W = ((h+factor)//factor)*factor, ((w+factor)//factor)*factor
-            padh = H-h if h%factor!=0 else 0
-            padw = W-w if w%factor!=0 else 0
-            input_ = F.pad(input_, (0,padw,0,padh), 'reflect')
-
-        restored = model_restoration(input_)
-        restored = torch.clamp(restored[0],0,1)
-
-        # Unpad images to original dimensions
-        if dataset == 'RealBlur_J' or dataset == 'RealBlur_R':
-            restored = restored[:,:,:h,:w]
+        _, restored = model_restoration(input_)
+        restored = torch.clamp(restored,0,1)
 
         restored = restored.permute(0, 2, 3, 1).cpu().detach().numpy()
 
         for batch in range(len(restored)):
             restored_img = img_as_ubyte(restored[batch])
-            utils.save_img((os.path.join(result_dir, filenames[batch]+'.png')), restored_img)
+            utils.save_img((os.path.join(result_dir, str(ii) + '.png')), restored_img)
