@@ -26,7 +26,7 @@ def load_pretrained_MPRnet(model, weights):
 def load_checkpoint(model, weights):
     checkpoint = torch.load(weights)
     try:
-        model.load_state_dict(checkpoint["state_dict"])
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
     except:
         state_dict = checkpoint["state_dict"]
         new_state_dict = OrderedDict()

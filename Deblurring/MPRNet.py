@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pdb import set_trace as stx
 from super_resolution.reconstruction import ReconstructModule
+from super_resolution.gate import GateModule
 
 ##########################################################################
 def conv(in_channels, out_channels, kernel_size, bias=False, stride = 1):
@@ -262,8 +263,15 @@ class MPRNet(nn.Module):
 
         self.tail = conv(n_feat+scale_orsnetfeats, 3, kernel_size, bias=bias)
 
-        self.before_reconstr = conv(n_feat+scale_orsnetfeats, (n_feat+scale_orsnetfeats) // 2, kernel_size, bias=bias)
+        self.before_reconstruction = nn.Sequential(conv(288, 64, kernel_size, bias=bias), act)
 
+        # Channel attentions for reconstruction (SR)
+        self.sr_cab1 = CAB(n_feat, kernel_size, reduction, bias=bias, act=act)
+        self.sr_cab2 = CAB(n_feat, kernel_size, reduction, bias=bias, act=act)
+        self.before_sr_cab3 = conv(n_feat+scale_orsnetfeats, n_feat, kernel_size, bias=bias)
+        self.sr_cab3 = CAB(n_feat, kernel_size, reduction, bias=bias, act=act)
+
+        # self.gate = GateModule()
         self.reconstructModule = ReconstructModule()
 
     def forward(self, x3_img):
@@ -306,6 +314,9 @@ class MPRNet(nn.Module):
         res1_top = self.stage1_decoder(feat1_top)
         res1_bot = self.stage1_decoder(feat1_bot)
 
+        stage1_sr_features = torch.cat([res1_top[0], res1_bot[0]], 2)
+        # print("stage1_sr_features.shape: ", stage1_sr_features.shape)
+
         ## Apply Supervised Attention Module (SAM)
         x2top_samfeats, stage1_img_top = self.sam12(res1_top[0], x2top_img)
         x2bot_samfeats, stage1_img_bot = self.sam12(res1_bot[0], x2bot_img)
@@ -333,6 +344,9 @@ class MPRNet(nn.Module):
         ## Pass features through Decoder of Stage 2
         res2 = self.stage2_decoder(feat2)
 
+        stage2_sr_features = res2[0]
+        # print("stage2_sr_features.shape: ", stage2_sr_features.shape)
+
         ## Apply SAM
         x3_samfeats, stage2_img = self.sam23(res2[0], x3_img)
 
@@ -348,13 +362,25 @@ class MPRNet(nn.Module):
         
         x3_cat = self.stage3_orsnet(x3_cat, feat2, res2)
 
-        ## final convolution before the reconstruction (SR)
+        stage3_sr_features = x3_cat
+        # print("stage3_sr_features.shape: ", stage3_sr_features.shape)
+
         stage3_img = self.tail(x3_cat)
 
-        ## reconstruction (SR)
-        res = self.reconstructModule(self.before_reconstr(x3_cat))
+        sr_feat1 = self.sr_cab1(stage1_sr_features)
+        sr_feat2 = self.sr_cab2(stage2_sr_features)
+        sr_feat3 = self.sr_cab3(self.before_sr_cab3(stage3_sr_features))
+        # print("sr_feats1.shape: ", sr_feat1.shape)
+        # print("sr_feats2.shape: ", sr_feat2.shape)
+        # print("sr_feats3.shape: ", sr_feat3.shape)
 
+        sr_feats = torch.cat([sr_feat1, sr_feat2, sr_feat3], 1)
+
+        ## final convolution before the reconstruction (SR)
+        ## reconstruction (SR)
+        res = self.reconstructModule(self.before_reconstruction(sr_feats))
         res = torch.sigmoid(res)
+
         # print("min: {}, max: {}".format(torch.min(res), torch.max(res)))
         # print("res.shape: {}", res.shape)
 
