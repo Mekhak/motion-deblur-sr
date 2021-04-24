@@ -37,6 +37,8 @@ class ReconstructModule(nn.Module):
         self.relu3 = nn.LeakyReLU(0.2, inplace=True)
         self.conv4 = nn.Conv2d(64, 3, (3, 3), 1, 1)
 
+        self.bicubic_up = nn.Upsample(scale_factor=4, mode='bicubic')
+
         for i in self.modules():
             if isinstance(i, nn.Conv2d):
                 j = i.kernel_size[0] * i.kernel_size[1] * i.out_channels
@@ -50,7 +52,7 @@ class ReconstructModule(nn.Module):
             layers.append(ResBLockDB(inchannel, outchannel))
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x, lr_deblur):
         res1 = self.resBlock(x)
         con1 = self.conv1(res1)
         pixelshuffle1 = self.relu1(self.pixelShuffle1(con1))
@@ -58,4 +60,8 @@ class ReconstructModule(nn.Module):
         pixelshuffle2 = self.relu2(self.pixelShuffle2(con2))
         con3 = self.relu3(self.conv3(pixelshuffle2))
         sr_deblur = self.conv4(con3)
-        return sr_deblur
+
+        # upsample + residual connection
+        res = torch.add(self.bicubic_up(lr_deblur), sr_deblur)
+
+        return res

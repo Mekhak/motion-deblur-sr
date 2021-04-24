@@ -352,7 +352,7 @@ class MPRNet(nn.Module):
         stage3_img = self.tail(x3_cat)
 
         ## reconstruction (SR)
-        res = self.reconstructModule(self.before_reconstr(x3_cat))
+        res = self.reconstructModule(self.before_reconstr(x3_cat), stage3_img)
 
         res = torch.sigmoid(res)
         # print("min: {}, max: {}".format(torch.min(res), torch.max(res)))

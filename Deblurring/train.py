@@ -78,14 +78,16 @@ scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.OPTIM.NUM_EPOCHS
 
 ######### Resume ###########
 if opt.TRAINING.RESUME:
-    path_chk_rest    = utils.get_last_path(model_dir, '_latest.pth')
+    # path_chk_rest    = utils.get_last_path(model_dir, '_latest.pth')
+    path_chk_rest = r"D:\myprojs\thesis\my\MPRNet\Deblurring\checkpoints\Deblurring\models\MPRNet\model_epoch_1_old.pth"
+    # path_chk_rest = r"D:\myprojs\thesis\my\MPRNet\Deblurring\pretrained_models\model_deblurring.pth"
     utils.load_checkpoint(model_restoration,path_chk_rest)
-    start_epoch = utils.load_start_epoch(path_chk_rest) + 1
-    utils.load_optim(optimizer, path_chk_rest)
-
-    for i in range(1, start_epoch):
-        scheduler.step()
-    start_lr = scheduler.get_lr()[0]
+    # start_epoch = utils.load_start_epoch(path_chk_rest) + 1
+    # utils.load_optim(optimizer, path_chk_rest)
+    #
+    # for i in range(1, start_epoch):
+    #     scheduler.step()
+    # start_lr = scheduler.get_lr()[0]
 
     print('------------------------------------------------------------------------------')
     print("==> Resuming Training with learning rate:", start_lr)
