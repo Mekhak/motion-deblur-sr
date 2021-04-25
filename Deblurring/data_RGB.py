@@ -1,6 +1,5 @@
 import os
 from dataset_RGB import DataLoaderTrain, DataLoaderVal, DataLoaderTest
-from dataset_hf5 import DataSet, DataValSet
 
 def get_training_data(rgb_dir):
     assert os.path.exists(rgb_dir)

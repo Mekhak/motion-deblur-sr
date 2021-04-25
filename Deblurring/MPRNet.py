@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pdb import set_trace as stx
 from super_resolution.reconstruction import ReconstructModule
-from super_resolution.gate import GateModule
+from super_resolution.layer_attention import LAM_Module
 
 ##########################################################################
 def conv(in_channels, out_channels, kernel_size, bias=False, stride = 1):
@@ -271,6 +271,9 @@ class MPRNet(nn.Module):
         self.before_sr_cab3 = conv(n_feat+scale_orsnetfeats, n_feat, kernel_size, bias=bias)
         self.sr_cab3 = CAB(n_feat, kernel_size, reduction, bias=bias, act=act)
 
+        # layer attention between CABS
+        self.lam = LAM_Module()
+
         # self.gate = GateModule()
         self.reconstructModule = ReconstructModule()
 
@@ -374,7 +377,9 @@ class MPRNet(nn.Module):
         # print("sr_feats2.shape: ", sr_feat2.shape)
         # print("sr_feats3.shape: ", sr_feat3.shape)
 
-        sr_feats = torch.cat([sr_feat1, sr_feat2, sr_feat3], 1)
+        # sr_feats = torch.cat([sr_feat1, sr_feat2, sr_feat3], 1)
+        sr_feats = torch.stack([sr_feat1, sr_feat2, sr_feat3], 1)
+        sr_feats = self.lam(sr_feats)
 
         ## final convolution before the reconstruction (SR)
         ## reconstruction (SR)
